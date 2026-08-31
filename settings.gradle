@@ -6,6 +6,7 @@ pluginManagement {
 }
 
 plugins {
+    id("dev.tuist") version "0.10.0"
     id("de.fayard.refreshVersions") version "0.60.5"
     id("com.gradle.develocity") version "4.5.0"
     id("com.gradle.common-custom-user-data-gradle-plugin") version "2.7.0"
@@ -14,6 +15,14 @@ plugins {
 rootProject.name = "androidRoot"
 
 def isCI = System.getenv('CI') != null
+
+tuist {
+    project = "tuist/duckduckgo-android"
+
+    buildCache {
+        push = true
+    }
+}
 
 develocity {
     server = 'https://duckduckgo.develocity.cloud/'
@@ -110,9 +119,4 @@ buildCache {
         removeUnusedEntriesAfterDays = 7
     }
 
-    remote(develocity.buildCache) {
-        enabled = true
-        def accessKey = System.getenv("DEVELOCITY_ACCESS_KEY")
-        push = isCI && accessKey != null && !accessKey.isEmpty()
-    }
 }
