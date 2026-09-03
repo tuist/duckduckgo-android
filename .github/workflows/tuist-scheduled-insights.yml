@@ -22,8 +22,13 @@ concurrency:
 jobs:
   build_and_test:
     name: Scheduled build and tests
-    runs-on: android-large-runner
-    timeout-minutes: 90
+    # DuckDuckGo's `android-large-runner` label is a self-hosted pool that
+    # doesn't exist in the tuist org — jobs targeting it queue for 24h and
+    # then get cancelled (see the fork's stuck `build-benchmark-nightly`
+    # runs). Use a GitHub-hosted Ubuntu runner instead. It's slower for a
+    # full Android build, but it actually runs.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
     env:
       DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
 
