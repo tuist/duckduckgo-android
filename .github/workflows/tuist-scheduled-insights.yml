@@ -6,7 +6,14 @@ name: Tuist scheduled insights
 #
 # The Tuist Gradle plugin (see settings.gradle) uploads build events and
 # `Test` task results automatically, so no extra configuration is needed
-# here beyond running the relevant Gradle tasks.
+# here beyond running the relevant Gradle tasks and authenticating.
+#
+# Authentication uses GitHub Actions OIDC (no long-lived secret): the
+# `tuist` CLI, invoked with `auth login`, detects the CI environment,
+# fetches a short-lived OIDC token via the id-token request env vars, and
+# exchanges it for a Tuist access token that it writes to
+# `~/.config/tuist/credentials/tuist.dev.json`. The Gradle plugin then
+# reads that file automatically at build time.
 
 on:
   schedule:
@@ -18,6 +25,15 @@ on:
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
+
+# `id-token: write` is what makes ACTIONS_ID_TOKEN_REQUEST_URL and
+# ACTIONS_ID_TOKEN_REQUEST_TOKEN available in the job env, which the Tuist
+# CLI needs for the OIDC exchange. Declaring `permissions:` overrides the
+# repo default, so `contents: read` has to be listed explicitly for
+# `actions/checkout` to work.
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   build_and_test:
@@ -49,6 +65,20 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
         with:
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Install Tuist CLI
+        uses: jdx/mise-action@v2
+        with:
+          tool_versions: |
+            tuist latest
+
+      - name: Authenticate with Tuist via GitHub OIDC
+        # The CLI detects CI + id-token request env vars, exchanges the
+        # GitHub OIDC token for a short-lived Tuist access token, and
+        # writes it to the credential store that the Gradle plugin reads.
+        # Requires the tuist.dev project `tuist/duckduckgo-android` to be
+        # connected to the GitHub repository (see PR description).
+        run: tuist auth login --url https://tuist.dev
 
       - name: Assemble Play debug
         run: ./gradlew assemblePlayDebug --stacktrace
