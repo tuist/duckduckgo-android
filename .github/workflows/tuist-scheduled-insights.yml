@@ -1,0 +1,66 @@
+name: Tuist scheduled insights
+
+# Runs a build and the JVM test suite on `develop` twice a day so
+# https://tuist.dev/tuist/duckduckgo-android keeps getting fresh build and
+# test insights even when there is no PR/push activity on this fork.
+#
+# The Tuist Gradle plugin (see settings.gradle) uploads build events and
+# `Test` task results automatically, so no extra configuration is needed
+# here beyond running the relevant Gradle tasks.
+
+on:
+  schedule:
+    # 07:00 and 19:00 UTC. Offset from the 02:00 UTC `build-benchmark-nightly`
+    # run and from `sync-upstream` (every 6 hours at :17).
+    - cron: "0 7,19 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  build_and_test:
+    name: Scheduled build and tests
+    runs-on: android-large-runner
+    timeout-minutes: 90
+    env:
+      DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          submodules: recursive
+
+      - name: Set up JDK version
+        uses: actions/setup-java@v4
+        with:
+          java-version-file: .github/.java-version
+          distribution: 'adopt'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+
+      - name: Assemble Play debug
+        run: ./gradlew assemblePlayDebug --stacktrace
+
+      - name: JVM tests
+        # Full suite (no predictive test selection) so Tuist gets a complete
+        # picture of test duration and flakiness on a known-good baseline.
+        run: ./gradlew jvm_tests --stacktrace
+
+      - name: Bundle the JVM checks report
+        if: always()
+        run: find . -type d -name 'reports' | zip -@ -r scheduled-insights-report.zip || true
+
+      - name: Upload the JVM checks report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduled-insights-report
+          path: scheduled-insights-report.zip
+          if-no-files-found: ignore
